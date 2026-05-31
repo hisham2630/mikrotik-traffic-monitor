@@ -1,0 +1,12 @@
+mikrotik-monitor
+mikrotik-monitor.exe
+*.db
+*.db-shm
+*.db-wal
+data.db*
+.cookies
+frontend/node_modules/
+frontend/dist/
+internal/api/static/assets/
+internal/api/static/index.html
+!internal/api/static/.gitkeep
