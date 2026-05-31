@@ -247,7 +247,7 @@ func (s *Server) createDevice(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.Poller.ReloadDevice(dev.ID)
+	// Poller starts when interfaces are saved (setInterfaces) or via sync loop.
 	writeJSON(w, http.StatusCreated, dev)
 }
 

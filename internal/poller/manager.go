@@ -53,6 +53,19 @@ func (m *Manager) Start() {
 		}
 		return out
 	}
+	m.hub.GetStatus = func(deviceIDs []int64) []models.DeviceStatus {
+		out := make([]models.DeviceStatus, 0, len(deviceIDs))
+		m.mu.RLock()
+		for _, id := range deviceIDs {
+			out = append(out, models.DeviceStatus{
+				DeviceID: id,
+				Online:   m.status[id],
+				Error:    m.lastErr[id],
+			})
+		}
+		m.mu.RUnlock()
+		return out
+	}
 	go m.syncLoop()
 }
 
@@ -103,6 +116,8 @@ func (m *Manager) ReloadDevice(id int64) {
 		delete(m.workers, id)
 	}
 	delete(m.prev, id)
+	delete(m.status, id)
+	delete(m.lastErr, id)
 	m.mu.Unlock()
 	m.sync()
 }
@@ -145,6 +160,7 @@ func fmtDeviceKey(deviceID int64, iface string) string {
 func (m *Manager) setStatus(deviceID int64, online bool, errMsg string) {
 	m.mu.Lock()
 	prev := m.status[deviceID]
+	prevErr := m.lastErr[deviceID]
 	m.status[deviceID] = online
 	if errMsg != "" {
 		m.lastErr[deviceID] = errMsg
@@ -152,7 +168,7 @@ func (m *Manager) setStatus(deviceID int64, online bool, errMsg string) {
 		m.lastErr[deviceID] = ""
 	}
 	m.mu.Unlock()
-	if prev != online || errMsg != "" {
+	if prev != online || errMsg != prevErr {
 		m.hub.BroadcastStatus(deviceID, online, errMsg)
 	}
 }
@@ -185,14 +201,18 @@ func (m *Manager) runDevice(deviceID int64, stop <-chan struct{}) {
 		pw, err := m.db.GetDevicePassword(deviceID)
 		if err != nil {
 			m.setStatus(deviceID, false, err.Error())
-			time.Sleep(backoff)
+			if !sleepOrStop(stop, backoff) {
+				return
+			}
 			backoff = min(backoff*2, 60*time.Second)
 			continue
 		}
 		ifaces, err := m.db.ListMonitoredInterfaces(deviceID)
 		if err != nil || len(ifaces) == 0 {
 			m.setStatus(deviceID, false, "no monitored interfaces — select interfaces and save")
-			time.Sleep(time.Duration(dev.PollingIntervalSec) * time.Second)
+			if !sleepOrStop(stop, time.Duration(dev.PollingIntervalSec)*time.Second) {
+				return
+			}
 			continue
 		}
 		var names []string
@@ -203,7 +223,9 @@ func (m *Manager) runDevice(deviceID int64, stop <-chan struct{}) {
 		}
 		if len(names) == 0 {
 			m.setStatus(deviceID, false, "no enabled interfaces")
-			time.Sleep(time.Duration(dev.PollingIntervalSec) * time.Second)
+			if !sleepOrStop(stop, time.Duration(dev.PollingIntervalSec)*time.Second) {
+				return
+			}
 			continue
 		}
 
@@ -215,7 +237,9 @@ func (m *Manager) runDevice(deviceID int64, stop <-chan struct{}) {
 		}
 		if err := client.TestConnection(); err != nil {
 			m.setStatus(deviceID, false, "connection failed: "+err.Error())
-			time.Sleep(backoff)
+			if !sleepOrStop(stop, backoff) {
+				return
+			}
 			backoff = min(backoff*2, 60*time.Second)
 			continue
 		}
@@ -299,6 +323,15 @@ func min(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+func sleepOrStop(stop <-chan struct{}, d time.Duration) bool {
+	select {
+	case <-stop:
+		return false
+	case <-time.After(d):
+		return true
+	}
 }
 
 // SampleWriter batches DB writes

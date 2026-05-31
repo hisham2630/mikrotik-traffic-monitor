@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FolderOutlined, CaretRightOutlined, CaretDownOutlined } from '@ant-design/icons';
 import DeviceCard from './DeviceCard';
+import InterfaceCard from './InterfaceCard';
 
 function countStatuses(devices) {
   let online = 0;
@@ -14,7 +15,13 @@ function countStatuses(devices) {
   return { online, offline, disabled };
 }
 
-export default function DeviceGroupSection({ groupName, devices, live, defaultOpen = true }) {
+export default function DeviceGroupSection({
+  groupName,
+  devices,
+  live,
+  cardLayout = 'device',
+  defaultOpen = true,
+}) {
   const [open, setOpen] = useState(defaultOpen);
   const counts = countStatuses(devices);
 
@@ -53,9 +60,24 @@ export default function DeviceGroupSection({ groupName, devices, live, defaultOp
       </button>
       {open && (
         <div className="device-card-grid">
-          {devices.map((d) => (
-            <DeviceCard key={d.id} device={d} live={live} />
-          ))}
+          {cardLayout === 'interface'
+            ? devices.flatMap((d) =>
+                (d.interfaces || []).length > 0
+                  ? (d.interfaces || []).map((iface) => (
+                      <InterfaceCard
+                        key={`${d.id}:${iface.interface_name}`}
+                        device={d}
+                        iface={iface}
+                        live={live}
+                      />
+                    ))
+                  : [
+                      <DeviceCard key={d.id} device={d} live={live} />,
+                    ]
+              )
+            : devices.map((d) => (
+                <DeviceCard key={d.id} device={d} live={live} />
+              ))}
         </div>
       )}
     </section>

@@ -200,3 +200,52 @@ body { font-family: system-ui, sans-serif; background: #141414; }
 }
 .device-card--online .device-card-footer { background: rgba(39, 73, 22, 0.55); }
 .device-card--offline .device-card-footer { background: rgba(88, 24, 28, 0.55); }
+
+/* Interface card layout (one card per port) */
+.interface-card { min-height: 108px; }
+.interface-card.device-card--idle {
+  background: linear-gradient(180deg, #1a2520 0%, #152018 100%);
+  border-color: #303030;
+}
+.interface-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px 8px;
+  min-height: 64px;
+}
+.interface-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f0f0f0;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.interface-card-traffic {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+.interface-card-traffic-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.interface-card-traffic-label {
+  color: #8c8c8c;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.interface-card-traffic-tx { color: #69b1ff; }
+.interface-card-traffic-rx { color: #95de64; }

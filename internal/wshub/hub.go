@@ -20,10 +20,14 @@ var upgrader = websocket.Upgrader{
 // Set on Hub by the poller manager after construction.
 type SnapshotFunc func(deviceIDs []int64) []models.TrafficSample
 
+// StatusFunc returns current online/error state for the given device IDs.
+type StatusFunc func(deviceIDs []int64) []models.DeviceStatus
+
 type Hub struct {
 	mu          sync.RWMutex
 	clients     map[*client]struct{}
 	GetSnapshot SnapshotFunc // optional; called when a client subscribes
+	GetStatus   StatusFunc   // optional; called when a client subscribes
 }
 
 type client struct {
@@ -95,14 +99,24 @@ func (c *client) readPump() {
 
 		// Push snapshot immediately so the client sees current data without
 		// waiting for the next poll tick.
-		if c.hub.GetSnapshot != nil {
-			ids := sub.DeviceIDs
-			if len(ids) == 0 {
-				// Empty device list means "all devices" — snapshot not available
-				// for that case; client will receive future broadcasts.
-				continue
+		if len(sub.DeviceIDs) == 0 {
+			continue
+		}
+		if c.hub.GetStatus != nil {
+			for _, st := range c.hub.GetStatus(sub.DeviceIDs) {
+				data, err := json.Marshal(map[string]interface{}{"type": "status", "payload": st})
+				if err != nil {
+					continue
+				}
+				select {
+				case c.send <- data:
+				default:
+					log.Printf("ws: status snapshot buffer full, dropping status")
+				}
 			}
-			for _, sample := range c.hub.GetSnapshot(ids) {
+		}
+		if c.hub.GetSnapshot != nil {
+			for _, sample := range c.hub.GetSnapshot(sub.DeviceIDs) {
 				data, err := json.Marshal(sample)
 				if err != nil {
 					continue
