@@ -52,7 +52,35 @@ Copy `frontend/dist/*` to `internal/api/static/` before `go build` if not using 
 - Add MikroTik devices (API port 8728), fetch interfaces, select ports to monitor
 - Create alert rules (threshold, duration, cooldown)
 
-## systemd example
+## Install (systemd)
+
+On Linux, build and install the binary plus a systemd unit:
+
+```bash
+make deps
+sudo make install
+sudo nano /etc/mikrotik-monitor/env   # set MIKROTIK_MONITOR_SECRET
+sudo systemctl enable --now mikrotik-monitor
+```
+
+Defaults:
+
+| Path | Purpose |
+|------|---------|
+| `/opt/mikrotik-monitor/mikrotik-monitor` | Binary |
+| `/var/lib/mikrotik-monitor/data.db` | SQLite database |
+| `/etc/mikrotik-monitor/env` | Secret and optional overrides |
+| `/etc/systemd/system/mikrotik-monitor.service` | systemd unit |
+
+Override paths at install time, e.g. `sudo make install LISTEN=:8081`.
+
+Remove the service (keeps data and config):
+
+```bash
+sudo make uninstall
+```
+
+## systemd unit (reference)
 
 ```ini
 [Unit]

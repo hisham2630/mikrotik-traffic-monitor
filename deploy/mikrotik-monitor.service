@@ -1,0 +1,22 @@
+[Unit]
+Description=MikroTik Traffic Monitor
+Documentation=https://github.com/hisham2630/mikrotik-traffic-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mikrotik-monitor
+Group=mikrotik-monitor
+ExecStart=@PREFIX@/mikrotik-monitor -listen @LISTEN@ -db @DATADIR@/data.db
+EnvironmentFile=-@CONFDIR@/env
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@DATADIR@
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
