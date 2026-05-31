@@ -19,7 +19,7 @@ Single-binary dashboard for monitoring MikroTik interface traffic with configura
 ```bash
 make deps
 make build
-./mikrotik-monitor -listen :8080 -db /var/lib/mikrotik-monitor/data.db
+./mikrotik-monitor -listen :8081 -db /var/lib/mikrotik-monitor/data.db
 ```
 
 ### Windows (development)
@@ -31,7 +31,7 @@ npm run build
 cd ..
 go mod tidy
 go build -o mikrotik-monitor.exe ./cmd/server
-.\mikrotik-monitor.exe -listen :8080
+.\mikrotik-monitor.exe -listen :8081
 ```
 
 Copy `frontend/dist/*` to `internal/api/static/` before `go build` if not using Make on Windows.
@@ -72,7 +72,7 @@ Defaults:
 | `/etc/mikrotik-monitor/env` | Secret and optional overrides |
 | `/etc/systemd/system/mikrotik-monitor.service` | systemd unit |
 
-Override paths at install time, e.g. `sudo make install LISTEN=:8081`.
+Override paths at install time, e.g. `sudo make install LISTEN=:9090`.
 
 Remove the service (keeps data and config):
 
@@ -88,7 +88,7 @@ Description=MikroTik Traffic Monitor
 After=network.target
 
 [Service]
-ExecStart=/opt/mikrotik-monitor/mikrotik-monitor -listen :8080 -db /var/lib/mikrotik-monitor/data.db
+ExecStart=/opt/mikrotik-monitor/mikrotik-monitor -listen :8081 -db /var/lib/mikrotik-monitor/data.db
 Restart=always
 Environment=MIKROTIK_MONITOR_SECRET=your-long-random-secret
 
@@ -100,6 +100,6 @@ WantedBy=multi-user.target
 
 | Flag / Env | Description |
 |------------|-------------|
-| `-listen` | HTTP listen address (default `:8080`) |
+| `-listen` | HTTP listen address (default `:8081`) |
 | `-db` | SQLite database path |
 | `-secret` / `MIKROTIK_MONITOR_SECRET` | Encryption & JWT secret |

@@ -6,7 +6,7 @@ FRONTEND_DIST := internal/api/static
 PREFIX ?= /opt/mikrotik-monitor
 DATADIR ?= /var/lib/mikrotik-monitor
 CONFDIR ?= /etc/mikrotik-monitor
-LISTEN ?= :8080
+LISTEN ?= :8081
 SYSTEMD_UNIT ?= /etc/systemd/system/mikrotik-monitor.service
 SERVICE_USER ?= mikrotik-monitor
 
@@ -24,7 +24,7 @@ build: frontend
 	go build -o $(BINARY) ./cmd/server
 
 run: build
-	./$(BINARY) -listen :8080 -db data.db
+	./$(BINARY) -listen :8081 -db data.db
 
 clean:
 	rm -f $(BINARY)

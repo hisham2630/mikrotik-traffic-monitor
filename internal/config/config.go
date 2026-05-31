@@ -12,7 +12,7 @@ type Config struct {
 }
 
 func Load() *Config {
-	listen := flag.String("listen", ":8080", "HTTP listen address")
+	listen := flag.String("listen", ":8081", "HTTP listen address")
 	dbPath := flag.String("db", "data.db", "SQLite database path")
 	secret := flag.String("secret", "", "Server secret for encryption/JWT (auto-generated if empty)")
 	flag.Parse()
