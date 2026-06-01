@@ -36,14 +36,26 @@ export default function AlertRules() {
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
-    try {
-      const [r, d, h] = await Promise.all([rulesApi.list(), devicesApi.list(), alerts.history()]);
-      setRuleList(ensureArray(r));
-      setDeviceList(ensureArray(d));
-      setHistory(ensureArray(h));
-    } catch {
+    const [rulesRes, devicesRes, historyRes] = await Promise.allSettled([
+      rulesApi.list(),
+      devicesApi.list(),
+      alerts.history(),
+    ]);
+    if (rulesRes.status === 'fulfilled') {
+      setRuleList(ensureArray(rulesRes.value));
+    } else {
       setRuleList([]);
+      message.error(`Failed to load rules: ${rulesRes.reason?.message || 'unknown error'}`);
+    }
+    if (devicesRes.status === 'fulfilled') {
+      setDeviceList(ensureArray(devicesRes.value));
+    } else {
       setDeviceList([]);
+      message.error(`Failed to load devices: ${devicesRes.reason?.message || 'unknown error'}`);
+    }
+    if (historyRes.status === 'fulfilled') {
+      setHistory(ensureArray(historyRes.value));
+    } else {
       setHistory([]);
     }
   }, []);
@@ -79,7 +91,18 @@ export default function AlertRules() {
     devicesApi.interfaces(row.device_id).then((ifs) => setIfaces(ensureArray(ifs)));
   };
 
-  const openModal = (row) => {
+  const ensureDevicesLoaded = async () => {
+    if (deviceList.length > 0) return;
+    try {
+      const d = await devicesApi.list();
+      setDeviceList(ensureArray(d));
+    } catch (e) {
+      message.error(e.message || 'Failed to load devices');
+    }
+  };
+
+  const openModal = async (row) => {
+    await ensureDevicesLoaded();
     setCopying(false);
     setEditing(row || null);
     form.resetFields();
@@ -100,7 +123,8 @@ export default function AlertRules() {
     setOpen(true);
   };
 
-  const openCopy = (row) => {
+  const openCopy = async (row) => {
+    await ensureDevicesLoaded();
     setCopying(true);
     setEditing(null);
     form.resetFields();

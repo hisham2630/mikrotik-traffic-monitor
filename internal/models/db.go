@@ -105,23 +105,71 @@ func (d *DB) migrate() error {
 		if applied {
 			continue
 		}
-		data, err := migrationsFS.ReadFile("migrations/" + name)
-		if err != nil {
+		if err := d.applyMigrationFile(name); err != nil {
 			return err
 		}
-		for _, stmt := range splitSQL(string(data)) {
-			if _, err := d.Exec(stmt); err != nil {
-				return fmt.Errorf("migration %s: %w\nstmt: %s", name, err, stmt)
-			}
-		}
-		if _, err := d.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name); err != nil {
-			return err
-		}
+	}
+	if err := d.repairSkippedMigrations(); err != nil {
+		return err
 	}
 	if err := d.PruneExpiredSessions(); err != nil {
 		return err
 	}
 	return d.seed()
+}
+
+func (d *DB) applyMigrationFile(name string) error {
+	data, err := migrationsFS.ReadFile("migrations/" + name)
+	if err != nil {
+		return err
+	}
+	for _, stmt := range splitSQL(string(data)) {
+		if _, err := d.Exec(stmt); err != nil {
+			return fmt.Errorf("migration %s: %w\nstmt: %s", name, err, stmt)
+		}
+	}
+	applied, err := d.migrationApplied(name)
+	if err != nil {
+		return err
+	}
+	if applied {
+		return nil
+	}
+	_, err = d.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name)
+	return err
+}
+
+func (d *DB) tableHasColumn(table, column string) (bool, error) {
+	var n int
+	err := d.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`,
+		table, column,
+	).Scan(&n)
+	return n > 0, err
+}
+
+// repairSkippedMigrations fixes DBs where legacy bootstrap marked 003+ as applied without running them.
+func (d *DB) repairSkippedMigrations() error {
+	hasWA, err := d.tableHasColumn("alert_rules", "notify_whatsapp")
+	if err != nil {
+		return err
+	}
+	if hasWA {
+		return nil
+	}
+	hasCh, err := d.tableHasColumn("alert_rules", "notify_channel")
+	if err != nil {
+		return err
+	}
+	if !hasCh {
+		if err := d.applyMigrationFile("003_notification_channels.sql"); err != nil {
+			return fmt.Errorf("repair 003: %w", err)
+		}
+	}
+	if err := d.applyMigrationFile("004_rule_notify_both.sql"); err != nil {
+		return fmt.Errorf("repair 004: %w", err)
+	}
+	return nil
 }
 
 func (d *DB) migrationApplied(name string) (bool, error) {
@@ -146,8 +194,13 @@ func (d *DB) bootstrapMigrations(names []string) error {
 	if devTable == 0 {
 		return nil
 	}
+	// Only migrations that shipped before schema_migrations tracking (never 003+).
+	legacy := map[string]bool{
+		"001_init.sql":    true,
+		"002_sessions.sql": true,
+	}
 	for _, name := range names {
-		if name == "003_notification_channels.sql" {
+		if !legacy[name] {
 			continue
 		}
 		if _, err := d.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name); err != nil {
