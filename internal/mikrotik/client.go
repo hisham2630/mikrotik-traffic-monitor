@@ -29,14 +29,19 @@ func (c *Client) Connect() (*routeros.Client, error) {
 	return routeros.Dial(addr, c.Username, c.Password)
 }
 
+// Ping verifies an existing API session with a lightweight command.
+func Ping(conn *routeros.Client) error {
+	_, err := conn.Run("/system/identity/print")
+	return err
+}
+
 func (c *Client) TestConnection() error {
 	client, err := c.Connect()
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	_, err = client.Run("/system/identity/print")
-	return err
+	return Ping(client)
 }
 
 func (c *Client) ListInterfaces() ([]models.DiscoveredInterface, error) {
@@ -70,10 +75,21 @@ func (c *Client) ListInterfaces() ([]models.DiscoveredInterface, error) {
 	return list, nil
 }
 
-// FetchCounters reads cumulative rx-byte/tx-byte counters for the given interface names.
+// FetchCounters opens a short-lived API session (login + logout on the router).
+// Prefer FetchCountersOn with a persistent connection when polling repeatedly.
+func (c *Client) FetchCounters(names []string) (map[string]InterfaceCounters, error) {
+	conn, err := c.Connect()
+	if err != nil {
+		return nil, fmt.Errorf("connect: %w", err)
+	}
+	defer conn.Close()
+	return FetchCountersOn(conn, names)
+}
+
+// FetchCountersOn reads cumulative rx-byte/tx-byte counters using an existing session.
 // It tries three strategies in order to cover different RouterOS versions (6/7) and
 // interface types (ethernet, VLAN, bridge, etc.).
-func (c *Client) FetchCounters(names []string) (map[string]InterfaceCounters, error) {
+func FetchCountersOn(conn *routeros.Client, names []string) (map[string]InterfaceCounters, error) {
 	if len(names) == 0 {
 		return map[string]InterfaceCounters{}, nil
 	}
@@ -81,12 +97,6 @@ func (c *Client) FetchCounters(names []string) (map[string]InterfaceCounters, er
 	for _, n := range names {
 		want[n] = struct{}{}
 	}
-
-	conn, err := c.Connect()
-	if err != nil {
-		return nil, fmt.Errorf("connect: %w", err)
-	}
-	defer conn.Close()
 
 	// Strategy 1: explicit proplist – most reliable cross-version approach.
 	reply, err := conn.Run("/interface/print", "=.proplist=name,rx-byte,tx-byte")

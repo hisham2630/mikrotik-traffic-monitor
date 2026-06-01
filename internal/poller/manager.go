@@ -235,7 +235,17 @@ func (m *Manager) runDevice(deviceID int64, stop <-chan struct{}) {
 			Username: dev.Username,
 			Password: pw,
 		}
-		if err := client.TestConnection(); err != nil {
+		conn, err := client.Connect()
+		if err != nil {
+			m.setStatus(deviceID, false, "connection failed: "+err.Error())
+			if !sleepOrStop(stop, backoff) {
+				return
+			}
+			backoff = min(backoff*2, 60*time.Second)
+			continue
+		}
+		if err := mikrotik.Ping(conn); err != nil {
+			_ = conn.Close()
 			m.setStatus(deviceID, false, "connection failed: "+err.Error())
 			if !sleepOrStop(stop, backoff) {
 				return
@@ -252,7 +262,7 @@ func (m *Manager) runDevice(deviceID int64, stop <-chan struct{}) {
 		}
 
 		pollOnce := func() bool {
-			counters, err := client.FetchCounters(names)
+			counters, err := mikrotik.FetchCountersOn(conn, names)
 			if err != nil {
 				log.Printf("device %d poll error: %v", deviceID, err)
 				m.setStatus(deviceID, false, err.Error())
@@ -307,10 +317,12 @@ func (m *Manager) runDevice(deviceID int64, stop <-chan struct{}) {
 			select {
 			case <-stop:
 				ticker.Stop()
+				_ = conn.Close()
 				return
 			case <-ticker.C:
 				if !pollOnce() {
 					ticker.Stop()
+					_ = conn.Close()
 					break pollLoop
 				}
 			}
