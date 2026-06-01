@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -61,7 +62,8 @@ func (s *Server) Routes() chi.Router {
 			r.Use(auth.RequireAdmin)
 			r.Put("/settings/notification", s.updateNotification)
 			r.Put("/settings/app", s.updateAppSettings)
-			r.Post("/settings/notification/test", s.testNotification)
+			r.Post("/settings/notification/test/whatsapp", s.testNotificationWhatsApp)
+			r.Post("/settings/notification/test/telegram", s.testNotificationTelegram)
 			r.Get("/users", s.listUsers)
 			r.Post("/users", s.createUser)
 			r.Delete("/users/{id}", s.deleteUser)
@@ -482,6 +484,10 @@ func (s *Server) createRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid body")
 		return
 	}
+	if err := s.DB.ValidateRuleNotifyChannels(in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	rule, err := s.DB.CreateAlertRule(in)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -499,6 +505,10 @@ func (s *Server) updateRule(w http.ResponseWriter, r *http.Request) {
 	var in models.AlertRuleInput
 	if err := readJSON(r, &in); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := s.DB.ValidateRuleNotifyChannels(in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	rule, err := s.DB.UpdateAlertRule(id, in)
@@ -546,6 +556,13 @@ func (s *Server) updateNotification(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid body")
 		return
 	}
+	c.TelegramBotToken = strings.TrimSpace(c.TelegramBotToken)
+	if c.TelegramEnabled || c.TelegramBotToken != "" {
+		if err := models.ValidateTelegramBotToken(c.TelegramBotToken); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if err := s.DB.UpdateNotificationConfig(c); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -582,8 +599,16 @@ func (s *Server) updateAppSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, req)
 }
 
-func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
-	if err := s.Alerter.SendTestNotification("MikroTik Monitor test notification"); err != nil {
+func (s *Server) testNotificationWhatsApp(w http.ResponseWriter, r *http.Request) {
+	if err := s.Alerter.SendTest(models.NotifyChannelWhatsApp); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+func (s *Server) testNotificationTelegram(w http.ResponseWriter, r *http.Request) {
+	if err := s.Alerter.SendTest(models.NotifyChannelTelegram); err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}

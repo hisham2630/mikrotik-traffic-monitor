@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -68,8 +69,13 @@ func main() {
 	r.Mount("/api", srv.Routes())
 	r.Handle("/*", api.StaticHandler())
 
+	srvHTTP := &http.Server{Addr: cfg.ListenAddr, Handler: r}
+	ln, err := net.Listen("tcp", cfg.ListenAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
 	log.Printf("listening on %s", cfg.ListenAddr)
-	if err := http.ListenAndServe(cfg.ListenAddr, r); err != nil {
+	if err := srvHTTP.Serve(ln); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 }

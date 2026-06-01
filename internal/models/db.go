@@ -5,6 +5,8 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +24,11 @@ type DB struct {
 }
 
 func Open(path, cliSecret string) (*DB, error) {
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("create database directory %q: %w", dir, err)
+		}
+	}
 	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
@@ -73,6 +80,9 @@ func (d *DB) resolveSecret(cliSecret string) (string, error) {
 func (d *DB) Secret() string { return d.secret }
 
 func (d *DB) migrate() error {
+	if _, err := d.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)`); err != nil {
+		return err
+	}
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
 		return err
@@ -84,7 +94,17 @@ func (d *DB) migrate() error {
 		}
 	}
 	sort.Strings(names)
+	if err := d.bootstrapMigrations(names); err != nil {
+		return err
+	}
 	for _, name := range names {
+		applied, err := d.migrationApplied(name)
+		if err != nil {
+			return err
+		}
+		if applied {
+			continue
+		}
 		data, err := migrationsFS.ReadFile("migrations/" + name)
 		if err != nil {
 			return err
@@ -94,11 +114,47 @@ func (d *DB) migrate() error {
 				return fmt.Errorf("migration %s: %w\nstmt: %s", name, err, stmt)
 			}
 		}
+		if _, err := d.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name); err != nil {
+			return err
+		}
 	}
 	if err := d.PruneExpiredSessions(); err != nil {
 		return err
 	}
 	return d.seed()
+}
+
+func (d *DB) migrationApplied(name string) (bool, error) {
+	var n int
+	err := d.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, name).Scan(&n)
+	return n > 0, err
+}
+
+// bootstrapMigrations marks pre-tracking migrations as applied on existing databases.
+func (d *DB) bootstrapMigrations(names []string) error {
+	var n int
+	if err := d.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	var devTable int
+	if err := d.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='devices'`).Scan(&devTable); err != nil {
+		return err
+	}
+	if devTable == 0 {
+		return nil
+	}
+	for _, name := range names {
+		if name == "003_notification_channels.sql" {
+			continue
+		}
+		if _, err := d.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func splitSQL(s string) []string {
@@ -133,7 +189,7 @@ func (d *DB) seed() error {
 		return err
 	}
 	if nc == 0 {
-		_, err := d.Exec(`INSERT INTO notification_config (id, api_url_template, phone_numbers, message_template, enabled) VALUES (1, '', '', '{message}', 0)`)
+		_, err := d.Exec(`INSERT INTO notification_config (id, api_url_template, phone_numbers, message_template, enabled, whatsapp_enabled, telegram_bot_token, telegram_chat_ids, telegram_enabled) VALUES (1, '', '', '{message}', 0, 0, '', '', 0)`)
 		if err != nil {
 			return err
 		}

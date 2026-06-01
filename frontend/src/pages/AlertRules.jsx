@@ -1,8 +1,28 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Table, Button, Modal, Form, Select, Input, InputNumber, Switch, message, Popconfirm, Tabs } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Modal, Form, Select, Input, InputNumber, Switch, Checkbox, message, Popconfirm, Tabs } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons';
 import { rules as rulesApi, devices as devicesApi, alerts, ensureArray, formatBps, parseBps } from '../api';
 import { useAuth } from '../context/AuthContext';
+
+function channelLabel(wa, tg) {
+  const parts = [];
+  if (wa) parts.push('WA');
+  if (tg) parts.push('TG');
+  return parts.length ? parts.join('+') : '—';
+}
+
+function historyChannelLabel(v) {
+  if (!v) return '—';
+  return v
+    .split(',')
+    .map((ch) => {
+      const c = ch.trim();
+      if (c === 'telegram') return 'TG';
+      if (c === 'whatsapp') return 'WA';
+      return c;
+    })
+    .join('+');
+}
 
 export default function AlertRules() {
   const { isAdmin } = useAuth();
@@ -11,6 +31,7 @@ export default function AlertRules() {
   const [history, setHistory] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [copying, setCopying] = useState(false);
   const [ifaces, setIfaces] = useState([]);
   const [form] = Form.useForm();
 
@@ -31,30 +52,59 @@ export default function AlertRules() {
     load();
   }, [load]);
 
+  const ruleChannels = (row) => {
+    let wa = row.notify_whatsapp;
+    let tg = row.notify_telegram;
+    if (wa === undefined && row.notify_channel != null) {
+      wa = row.notify_channel !== 'telegram';
+      tg = row.notify_channel === 'telegram';
+    }
+    return { wa: wa !== false && wa !== 0, tg: !!tg };
+  };
+
+  const fillForm = (row) => {
+    const { wa, tg } = ruleChannels(row);
+    form.setFieldsValue({
+      device_id: row.device_id,
+      interface_id: row.interface_id,
+      direction: row.direction,
+      condition: row.condition,
+      threshold_input: formatBps(row.threshold_bps),
+      duration_sec: row.duration_sec,
+      cooldown_sec: row.cooldown_sec,
+      notify_whatsapp: wa,
+      notify_telegram: tg,
+      enabled: row.enabled,
+    });
+    devicesApi.interfaces(row.device_id).then((ifs) => setIfaces(ensureArray(ifs)));
+  };
+
   const openModal = (row) => {
+    setCopying(false);
     setEditing(row || null);
     form.resetFields();
     if (row) {
-      form.setFieldsValue({
-        device_id: row.device_id,
-        interface_id: row.interface_id,
-        direction: row.direction,
-        condition: row.condition,
-        threshold_input: formatBps(row.threshold_bps),
-        duration_sec: row.duration_sec,
-        cooldown_sec: row.cooldown_sec,
-        enabled: row.enabled,
-      });
-      devicesApi.interfaces(row.device_id).then((ifs) => setIfaces(ensureArray(ifs)));
+      fillForm(row);
     } else {
       form.setFieldsValue({
         direction: 'rx',
         condition: 'above',
         duration_sec: 30,
         cooldown_sec: 300,
+        notify_whatsapp: true,
+        notify_telegram: false,
         enabled: true,
       });
+      setIfaces([]);
     }
+    setOpen(true);
+  };
+
+  const openCopy = (row) => {
+    setCopying(true);
+    setEditing(null);
+    form.resetFields();
+    fillForm(row);
     setOpen(true);
   };
 
@@ -66,6 +116,10 @@ export default function AlertRules() {
 
   const save = async () => {
     const v = await form.validateFields();
+    if (!v.notify_whatsapp && !v.notify_telegram) {
+      message.error('Select at least one channel (WhatsApp and/or Telegram)');
+      return;
+    }
     const threshold_bps = parseBps(v.threshold_input);
     if (threshold_bps == null) {
       message.error('Invalid threshold. Use e.g. 10M, 1G, 23k');
@@ -102,14 +156,26 @@ export default function AlertRules() {
     },
     { title: 'Dur', dataIndex: 'duration_sec', width: 40, render: (v) => `${v}s` },
     { title: 'CD', dataIndex: 'cooldown_sec', width: 45, render: (v) => `${v}s` },
+    {
+      title: 'Ch',
+      width: 50,
+      render: (_, r) => {
+        const { wa, tg } = ruleChannels(r);
+        return channelLabel(wa, tg);
+      },
+    },
     { title: 'On', dataIndex: 'enabled', width: 35, render: (v) => (v ? 'Y' : 'N') },
     isAdmin && {
       title: '',
-      width: 50,
+      width: 110,
       render: (_, r) => (
-        <Popconfirm title="Delete?" onConfirm={async () => { await rulesApi.delete(r.id); load(); }}>
-          <Button size="small" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
+        <Space size={2}>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} />
+          <Button size="small" icon={<CopyOutlined />} onClick={() => openCopy(r)} />
+          <Popconfirm title="Delete?" onConfirm={async () => { await rulesApi.delete(r.id); load(); }}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ].filter(Boolean);
@@ -119,6 +185,12 @@ export default function AlertRules() {
     { title: 'Device', dataIndex: 'device_id', render: deviceName },
     { title: 'Iface', dataIndex: 'interface_name' },
     { title: 'Msg', dataIndex: 'message', ellipsis: true },
+    {
+      title: 'Ch',
+      dataIndex: 'notify_channel',
+      width: 55,
+      render: historyChannelLabel,
+    },
     { title: 'OK', dataIndex: 'notified', width: 35, render: (v) => (v ? 'Y' : 'N') },
   ];
 
@@ -149,7 +221,13 @@ export default function AlertRules() {
         ]}
       />
 
-      <Modal title={editing ? 'Edit Rule' : 'Add Rule'} open={open} onOk={save} onCancel={() => setOpen(false)} maskClosable={false}>
+      <Modal
+        title={editing ? 'Edit Rule' : copying ? 'Copy Rule' : 'Add Rule'}
+        open={open}
+        onOk={save}
+        onCancel={() => { setOpen(false); setCopying(false); }}
+        maskClosable={false}
+      >
         <Form form={form} layout="vertical" size="small">
           <Form.Item name="device_id" label="Device" rules={[{ required: true }]}>
             <Select options={deviceList.map((d) => ({ value: d.id, label: d.name }))} onChange={onDeviceChange} />
@@ -186,6 +264,16 @@ export default function AlertRules() {
           </Form.Item>
           <Form.Item name="cooldown_sec" label="Cooldown (sec)">
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Notify via" required>
+            <Space>
+              <Form.Item name="notify_whatsapp" valuePropName="checked" noStyle>
+                <Checkbox>WhatsApp</Checkbox>
+              </Form.Item>
+              <Form.Item name="notify_telegram" valuePropName="checked" noStyle>
+                <Checkbox>Telegram</Checkbox>
+              </Form.Item>
+            </Space>
           </Form.Item>
           <Form.Item name="enabled" valuePropName="checked">
             <Switch checkedChildren="Enabled" unCheckedChildren="Disabled" />

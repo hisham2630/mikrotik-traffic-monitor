@@ -59,7 +59,8 @@ export const settings = {
   notification: () => request('/settings/notification'),
   updateNotification: (body) =>
     request('/settings/notification', { method: 'PUT', body: JSON.stringify(body) }),
-  testNotification: () => request('/settings/notification/test', { method: 'POST' }),
+  testNotificationWhatsApp: () => request('/settings/notification/test/whatsapp', { method: 'POST' }),
+  testNotificationTelegram: () => request('/settings/notification/test/telegram', { method: 'POST' }),
   app: () => request('/settings/app'),
   updateApp: (body) => request('/settings/app', { method: 'PUT', body: JSON.stringify(body) }),
 };

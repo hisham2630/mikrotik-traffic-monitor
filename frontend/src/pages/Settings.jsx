@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Form, Input, InputNumber, Switch, Button, Table, message, Popconfirm, Select, Tabs } from 'antd';
+import { Card, Form, Input, InputNumber, Switch, Button, Table, message, Popconfirm, Select, Tabs, Space } from 'antd';
 import { settings as settingsApi, users as usersApi, ensureArray } from '../api';
 
 export default function Settings() {
@@ -14,7 +14,10 @@ export default function Settings() {
       settingsApi.app(),
       usersApi.list(),
     ]);
-    notifForm.setFieldsValue(n);
+    notifForm.setFieldsValue({
+      ...n,
+      whatsapp_enabled: n.whatsapp_enabled ?? n.enabled ?? false,
+    });
     appForm.setFieldsValue(a);
     setUserList(ensureArray(u));
   }, [notifForm, appForm]);
@@ -32,10 +35,19 @@ export default function Settings() {
     }
   };
 
-  const testNotif = async () => {
+  const testWhatsApp = async () => {
     try {
-      await settingsApi.testNotification();
-      message.success('Test sent');
+      await settingsApi.testNotificationWhatsApp();
+      message.success('WhatsApp test sent');
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  const testTelegram = async () => {
+    try {
+      await settingsApi.testNotificationTelegram();
+      message.success('Telegram test sent');
     } catch (e) {
       message.error(e.message);
     }
@@ -85,28 +97,65 @@ export default function Settings() {
           key: 'notif',
           label: 'Notifications',
           children: (
-            <Card size="small" style={{ maxWidth: 600 }}>
-              <Form form={notifForm} layout="vertical" size="small">
+            <Form form={notifForm} layout="vertical" size="small" style={{ maxWidth: 640 }}>
+              <Form.Item
+                name="message_template"
+                label="Message template"
+                extra="Use {message} for the alert text. Applies to WhatsApp and Telegram."
+              >
+                <Input placeholder="{message}" />
+              </Form.Item>
+
+              <Card size="small" title="WhatsApp" style={{ marginBottom: 12 }}>
                 <Form.Item name="api_url_template" label="API URL" extra="Use {phone} and {message}">
                   <Input placeholder="http://host:3000/api/sendText?phone={phone}&text={message}&session=casher" />
                 </Form.Item>
                 <Form.Item name="phone_numbers" label="Phone numbers (comma-separated)">
                   <Input />
                 </Form.Item>
-                <Form.Item name="message_template" label="Message template">
-                  <Input />
+                <Form.Item name="whatsapp_enabled" valuePropName="checked">
+                  <Switch checkedChildren="Enabled" unCheckedChildren="Disabled" />
                 </Form.Item>
-                <Form.Item name="enabled" valuePropName="checked">
-                  <Switch checkedChildren="Enabled" />
+                <Button size="small" onClick={testWhatsApp}>
+                  Test WhatsApp
+                </Button>
+              </Card>
+
+              <Card size="small" title="Telegram" style={{ marginBottom: 12 }}>
+                <Form.Item
+                  name="telegram_bot_token"
+                  label="Bot token"
+                  extra="Paste the full token from @BotFather (e.g. 123456789:AAH…). Must include the digits and colon."
+                  rules={[
+                    {
+                      pattern: /^\d+:[A-Za-z0-9_-]+$/,
+                      message: 'Enter the complete token (bot id, colon, secret)',
+                    },
+                  ]}
+                >
+                  <Input placeholder="123456789:AAHxxxxxxxxxxxxxxxx" autoComplete="off" spellCheck={false} />
                 </Form.Item>
-                <Button type="primary" size="small" onClick={saveNotif} style={{ marginRight: 8 }}>
-                  Save
+                <Form.Item
+                  name="telegram_chat_ids"
+                  label="Chat IDs (comma-separated)"
+                  extra="Groups/supergroups: use the negative id (e.g. -1002405693501). Message @userinfobot in the group or use getUpdates after adding the bot."
+                >
+                  <Input placeholder="-1002405693501" />
+                </Form.Item>
+                <Form.Item name="telegram_enabled" valuePropName="checked">
+                  <Switch checkedChildren="Enabled" unCheckedChildren="Disabled" />
+                </Form.Item>
+                <Button size="small" onClick={testTelegram}>
+                  Test Telegram
                 </Button>
-                <Button size="small" onClick={testNotif}>
-                  Test
+              </Card>
+
+              <Space>
+                <Button type="primary" size="small" onClick={saveNotif}>
+                  Save notifications
                 </Button>
-              </Form>
-            </Card>
+              </Space>
+            </Form>
           ),
         },
         {

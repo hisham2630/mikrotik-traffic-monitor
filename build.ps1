@@ -1,15 +1,19 @@
-# Windows build script
-Set-Location $PSScriptRoot
+# Full rebuild: frontend + embed into Go binary (Windows)
+$ErrorActionPreference = "Stop"
+$root = $PSScriptRoot
+
 Write-Host "Building frontend..."
-Set-Location frontend
+Set-Location "$root\frontend"
 npm install
 npm run build
-Set-Location ..
-$staticDir = "internal\api\static"
-if (Test-Path $staticDir) { Remove-Item -Recurse -Force $staticDir }
-New-Item -ItemType Directory -Path $staticDir | Out-Null
-Copy-Item -Recurse frontend\dist\* $staticDir\
+
+Write-Host "Copying to internal/api/static..."
+Remove-Item -Recurse -Force "$root\internal\api\static\*" -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path "$root\internal\api\static" | Out-Null
+Copy-Item -Recurse -Force "$root\frontend\dist\*" "$root\internal\api\static\"
+
 Write-Host "Building Go binary..."
-go mod tidy
-go build -o mikrotik-monitor.exe ./cmd/server
-Write-Host "Done: mikrotik-monitor.exe"
+Set-Location $root
+go build -o monitor.exe ./cmd/server
+
+Write-Host "Done. Run: .\monitor.exe -db .\data.db"

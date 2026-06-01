@@ -59,29 +59,36 @@ type AlertRule struct {
 	Condition    string    `json:"condition"`
 	ThresholdBps int64     `json:"threshold_bps"`
 	DurationSec  int       `json:"duration_sec"`
-	CooldownSec  int       `json:"cooldown_sec"`
-	Enabled      bool      `json:"enabled"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	CooldownSec    int       `json:"cooldown_sec"`
+	NotifyWhatsApp bool      `json:"notify_whatsapp"`
+	NotifyTelegram bool      `json:"notify_telegram"`
+	Enabled        bool      `json:"enabled"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type AlertRuleInput struct {
-	DeviceID     int64  `json:"device_id"`
-	InterfaceID  *int64 `json:"interface_id"`
-	Direction    string `json:"direction"`
-	Condition    string `json:"condition"`
-	ThresholdBps int64  `json:"threshold_bps"`
-	DurationSec  int    `json:"duration_sec"`
-	CooldownSec  int    `json:"cooldown_sec"`
-	Enabled      bool   `json:"enabled"`
+	DeviceID      int64  `json:"device_id"`
+	InterfaceID   *int64 `json:"interface_id"`
+	Direction     string `json:"direction"`
+	Condition     string `json:"condition"`
+	ThresholdBps  int64  `json:"threshold_bps"`
+	DurationSec   int    `json:"duration_sec"`
+	CooldownSec    int  `json:"cooldown_sec"`
+	NotifyWhatsApp bool `json:"notify_whatsapp"`
+	NotifyTelegram bool `json:"notify_telegram"`
+	Enabled        bool `json:"enabled"`
 }
 
 type NotificationConfig struct {
-	ID              int    `json:"id"`
-	APIURLTemplate  string `json:"api_url_template"`
-	PhoneNumbers    string `json:"phone_numbers"`
-	MessageTemplate string `json:"message_template"`
-	Enabled         bool   `json:"enabled"`
+	ID               int    `json:"id"`
+	APIURLTemplate   string `json:"api_url_template"`
+	PhoneNumbers     string `json:"phone_numbers"`
+	MessageTemplate  string `json:"message_template"`
+	WhatsAppEnabled  bool   `json:"whatsapp_enabled"`
+	TelegramBotToken string `json:"telegram_bot_token"`
+	TelegramChatIDs  string `json:"telegram_chat_ids"`
+	TelegramEnabled  bool   `json:"telegram_enabled"`
 }
 
 type AppSettings struct {
@@ -106,6 +113,7 @@ type AlertHistory struct {
 	TriggeredValueBps int64     `json:"triggered_value_bps"`
 	Direction         string    `json:"direction"`
 	Message           string    `json:"message"`
+	NotifyChannel     string    `json:"notify_channel"`
 	FiredAt           time.Time `json:"fired_at"`
 	Notified          bool      `json:"notified"`
 }
