@@ -28,6 +28,7 @@ type Manager struct {
 	lastErr  map[int64]string
 	prev     map[int64]map[string]counterSnap
 	latest   map[string]models.TrafficSample // key: "deviceID:interface"
+	stats    map[int64]models.DeviceStats
 }
 
 func New(db *models.DB, hub *wshub.Hub, out chan<- models.TrafficSample) *Manager {
@@ -40,6 +41,7 @@ func New(db *models.DB, hub *wshub.Hub, out chan<- models.TrafficSample) *Manage
 		lastErr: make(map[int64]string),
 		prev:    make(map[int64]map[string]counterSnap),
 		latest:  make(map[string]models.TrafficSample),
+		stats:   make(map[int64]models.DeviceStats),
 	}
 }
 
@@ -62,6 +64,17 @@ func (m *Manager) Start() {
 				Online:   m.status[id],
 				Error:    m.lastErr[id],
 			})
+		}
+		m.mu.RUnlock()
+		return out
+	}
+	m.hub.GetDeviceStats = func(deviceIDs []int64) []models.DeviceStats {
+		out := make([]models.DeviceStats, 0, len(deviceIDs))
+		m.mu.RLock()
+		for _, id := range deviceIDs {
+			if st, ok := m.stats[id]; ok {
+				out = append(out, st)
+			}
 		}
 		m.mu.RUnlock()
 		return out
@@ -104,6 +117,7 @@ func (m *Manager) sync() {
 			delete(m.status, id)
 			delete(m.lastErr, id)
 			delete(m.prev, id)
+			delete(m.stats, id)
 		}
 	}
 	m.mu.Unlock()
@@ -118,6 +132,7 @@ func (m *Manager) ReloadDevice(id int64) {
 	delete(m.prev, id)
 	delete(m.status, id)
 	delete(m.lastErr, id)
+	delete(m.stats, id)
 	m.mu.Unlock()
 	m.sync()
 }
@@ -132,6 +147,13 @@ func (m *Manager) LastError(id int64) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.lastErr[id]
+}
+
+func (m *Manager) LatestStats(deviceID int64) (models.DeviceStats, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.stats[deviceID]
+	return st, ok
 }
 
 func (m *Manager) LatestSamples(deviceID int64) []models.TrafficSample {
@@ -306,6 +328,20 @@ func (m *Manager) runDevice(deviceID int64, stop <-chan struct{}) {
 			}
 			m.mu.Unlock()
 			m.setStatus(deviceID, true, "")
+
+			if res, err := mikrotik.GetSystemResourceOn(conn); err != nil {
+				log.Printf("device %d resource stats: %v", deviceID, err)
+			} else {
+				st := models.DeviceStats{
+					DeviceID: deviceID,
+					CPULoad:  res.CPULoad,
+					Uptime:   res.Uptime,
+				}
+				m.mu.Lock()
+				m.stats[deviceID] = st
+				m.mu.Unlock()
+				m.hub.BroadcastDeviceStats(st)
+			}
 			return true
 		}
 

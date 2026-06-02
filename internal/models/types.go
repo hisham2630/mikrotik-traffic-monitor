@@ -123,3 +123,9 @@ type DeviceStatus struct {
 	Online   bool   `json:"online"`
 	Error    string `json:"error,omitempty"`
 }
+
+type DeviceStats struct {
+	DeviceID int64  `json:"device_id"`
+	CPULoad  int    `json:"cpu_load"`
+	Uptime   string `json:"uptime"`
+}

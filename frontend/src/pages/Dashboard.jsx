@@ -3,6 +3,7 @@ import { Typography, Statistic, Row, Col, Segmented, Input } from 'antd';
 import { AppstoreOutlined, UnorderedListOutlined, SearchOutlined, ClusterOutlined, ApiOutlined } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import { dashboard as dashboardApi, formatBps, ensureArray } from '../api';
+import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import DeviceGroupSection from '../components/DeviceGroupSection';
 import DashboardTableView from '../components/DashboardTableView';
@@ -55,10 +56,20 @@ function groupDevices(devices) {
     }));
 }
 
+function mergeStatsFromOverview(data) {
+  const next = {};
+  for (const d of ensureArray(data)) {
+    if (d.stats) next[d.id] = d.stats;
+  }
+  return next;
+}
+
 export default function Dashboard() {
   const location = useLocation();
+  const { isAdmin } = useAuth();
   const [overview, setOverview] = useState([]);
   const [live, setLive] = useState({});
+  const [deviceStatsById, setDeviceStatsById] = useState({});
   const [viewMode, setViewMode] = useState(() =>
     readStoredChoice(STORAGE_VIEW_MODE, ['cards', 'table'], 'cards')
   );
@@ -79,6 +90,7 @@ export default function Dashboard() {
     try {
       const data = await dashboardApi.overview();
       setOverview(ensureArray(data));
+      setDeviceStatsById((prev) => ({ ...prev, ...mergeStatsFromOverview(data) }));
     } catch {
       setOverview([]);
     }
@@ -109,6 +121,14 @@ export default function Dashboard() {
       );
       return;
     }
+    if (msg.type === 'device_stats') {
+      const st = msg.payload;
+      if (st?.device_id != null) {
+        setDeviceStatsById((prev) => ({ ...prev, [st.device_id]: st }));
+      }
+      return;
+    }
+    if (!msg.device_id || !msg.interface) return;
     const key = `${msg.device_id}:${msg.interface}`;
     setLive((prev) => ({
       ...prev,
@@ -245,6 +265,8 @@ export default function Dashboard() {
                 devices={g.devices}
                 live={live}
                 cardLayout={cardLayout}
+                deviceStatsById={deviceStatsById}
+                isAdmin={isAdmin}
               />
             ))
           )}

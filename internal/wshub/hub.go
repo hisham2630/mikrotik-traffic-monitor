@@ -23,11 +23,15 @@ type SnapshotFunc func(deviceIDs []int64) []models.TrafficSample
 // StatusFunc returns current online/error state for the given device IDs.
 type StatusFunc func(deviceIDs []int64) []models.DeviceStatus
 
+// DeviceStatsFunc returns latest CPU/uptime for the given device IDs.
+type DeviceStatsFunc func(deviceIDs []int64) []models.DeviceStats
+
 type Hub struct {
-	mu          sync.RWMutex
-	clients     map[*client]struct{}
-	GetSnapshot SnapshotFunc // optional; called when a client subscribes
-	GetStatus   StatusFunc   // optional; called when a client subscribes
+	mu             sync.RWMutex
+	clients        map[*client]struct{}
+	GetSnapshot    SnapshotFunc    // optional; called when a client subscribes
+	GetStatus      StatusFunc      // optional; called when a client subscribes
+	GetDeviceStats DeviceStatsFunc // optional; called when a client subscribes
 }
 
 type client struct {
@@ -115,6 +119,19 @@ func (c *client) readPump() {
 				}
 			}
 		}
+		if c.hub.GetDeviceStats != nil {
+			for _, st := range c.hub.GetDeviceStats(sub.DeviceIDs) {
+				data, err := json.Marshal(map[string]interface{}{"type": "device_stats", "payload": st})
+				if err != nil {
+					continue
+				}
+				select {
+				case c.send <- data:
+				default:
+					log.Printf("ws: device_stats snapshot buffer full, dropping stats")
+				}
+			}
+		}
 		if c.hub.GetSnapshot != nil {
 			for _, sample := range c.hub.GetSnapshot(sub.DeviceIDs) {
 				data, err := json.Marshal(sample)
@@ -181,6 +198,26 @@ func (h *Hub) BroadcastStatus(deviceID int64, online bool, errMsg string) {
 	for c := range h.clients {
 		if len(c.deviceIDs) > 0 {
 			if _, ok := c.deviceIDs[deviceID]; !ok {
+				continue
+			}
+		}
+		select {
+		case c.send <- data:
+		default:
+		}
+	}
+}
+
+func (h *Hub) BroadcastDeviceStats(st models.DeviceStats) {
+	data, err := json.Marshal(map[string]interface{}{"type": "device_stats", "payload": st})
+	if err != nil {
+		return
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		if len(c.deviceIDs) > 0 {
+			if _, ok := c.deviceIDs[st.DeviceID]; !ok {
 				continue
 			}
 		}

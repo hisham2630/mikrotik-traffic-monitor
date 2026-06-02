@@ -60,6 +60,7 @@ func (s *Server) Routes() chi.Router {
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
+			r.Post("/devices/{id}/reboot", s.rebootDevice)
 			r.Put("/settings/notification", s.updateNotification)
 			r.Put("/settings/app", s.updateAppSettings)
 			r.Post("/settings/notification/test/whatsapp", s.testNotificationWhatsApp)
@@ -176,7 +177,8 @@ func (s *Server) dashboardOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	type row struct {
 		models.Device
-		Interfaces []ifaceLive `json:"interfaces"`
+		Interfaces []ifaceLive        `json:"interfaces"`
+		Stats      *models.DeviceStats `json:"stats,omitempty"`
 	}
 	out := make([]row, 0, len(devs))
 	for _, d := range devs {
@@ -204,7 +206,11 @@ func (s *Server) dashboardOverview(w http.ResponseWriter, r *http.Request) {
 		if live == nil {
 			live = []ifaceLive{}
 		}
-		out = append(out, row{Device: d, Interfaces: live})
+		r := row{Device: d, Interfaces: live}
+		if st, ok := s.Poller.LatestStats(d.ID); ok {
+			r.Stats = &st
+		}
+		out = append(out, r)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -447,6 +453,43 @@ func (s *Server) listInterfaces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) rebootDevice(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	dev, err := s.DB.GetDevice(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	pw, err := s.DB.GetDevicePassword(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	port := dev.Port
+	if port == 0 {
+		port = 8728
+	}
+	client := &mikrotik.Client{
+		Host:     dev.Host,
+		Port:     port,
+		Username: dev.Username,
+		Password: pw,
+	}
+	if err := client.Reboot(); err != nil {
+		// Router often drops the connection immediately after reboot — treat as success.
+		errStr := strings.ToLower(err.Error())
+		if !strings.Contains(errStr, "connection") &&
+			!strings.Contains(errStr, "closed") &&
+			!strings.Contains(errStr, "eof") &&
+			!strings.Contains(errStr, "broken") {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	}
+	s.Poller.ReloadDevice(id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) getHistory(w http.ResponseWriter, r *http.Request) {

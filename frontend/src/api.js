@@ -46,6 +46,7 @@ export const devices = {
     request(`/devices/${id}/interfaces`, { method: 'PUT', body: JSON.stringify({ interfaces }) }),
   history: (id, iface, hours = 1) =>
     request(`/devices/${id}/history?interface=${encodeURIComponent(iface)}&hours=${hours}`),
+  reboot: (id) => request(`/devices/${id}/reboot`, { method: 'POST' }),
 };
 
 export const rules = {

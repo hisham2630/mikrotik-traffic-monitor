@@ -35,6 +35,49 @@ func Ping(conn *routeros.Client) error {
 	return err
 }
 
+// SystemResource holds CPU load and uptime from /system/resource/print.
+type SystemResource struct {
+	CPULoad int
+	Uptime  string
+}
+
+// GetSystemResourceOn reads cpu-load and uptime using an existing session.
+func GetSystemResourceOn(conn *routeros.Client) (SystemResource, error) {
+	reply, err := conn.Run("/system/resource/print")
+	if err != nil {
+		return SystemResource{}, err
+	}
+	if len(reply.Re) == 0 {
+		return SystemResource{}, fmt.Errorf("empty resource reply")
+	}
+	m := reply.Re[0].Map
+	cpu := parseInt(m["cpu-load"])
+	return SystemResource{
+		CPULoad: cpu,
+		Uptime:  strings.TrimSpace(m["uptime"]),
+	}, nil
+}
+
+func parseInt(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	v, _ := strconv.Atoi(s)
+	return v
+}
+
+// Reboot issues /system/reboot on a new short-lived connection.
+func (c *Client) Reboot() error {
+	conn, err := c.Connect()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	_, err = conn.Run("/system/reboot")
+	return err
+}
+
 func (c *Client) TestConnection() error {
 	client, err := c.Connect()
 	if err != nil {
