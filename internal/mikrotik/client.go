@@ -115,6 +115,7 @@ func (c *Client) ListInterfaces() ([]models.DiscoveredInterface, error) {
 	if list == nil {
 		list = []models.DiscoveredInterface{}
 	}
+	models.SortDiscoveredInterfaces(list)
 	return list, nil
 }
 

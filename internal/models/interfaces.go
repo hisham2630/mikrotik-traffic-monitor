@@ -3,7 +3,7 @@ package models
 import "strings"
 
 func (d *DB) ListMonitoredInterfaces(deviceID int64) ([]MonitoredInterface, error) {
-	rows, err := d.Query(`SELECT id, device_id, interface_name, interface_type, enabled, created_at FROM monitored_interfaces WHERE device_id = ? ORDER BY interface_type, interface_name`, deviceID)
+	rows, err := d.Query(`SELECT id, device_id, interface_name, interface_type, enabled, created_at FROM monitored_interfaces WHERE device_id = ? ORDER BY interface_type`, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +20,11 @@ func (d *DB) ListMonitoredInterfaces(deviceID int64) ([]MonitoredInterface, erro
 		m.CreatedAt = parseTime(created)
 		list = append(list, m)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	SortMonitoredInterfaces(list)
+	return list, nil
 }
 
 func (d *DB) AddMonitoredInterface(deviceID int64, name, ifaceType string) (*MonitoredInterface, error) {

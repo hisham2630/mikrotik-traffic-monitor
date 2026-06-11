@@ -4,6 +4,7 @@ import { Tabs, Typography, Row, Col, Tag } from 'antd';
 import { devices as devicesApi, formatBps, ensureArray } from '../api';
 import { useWebSocket } from '../hooks/useWebSocket';
 import TrafficChart from '../components/TrafficChart';
+import { compareNatural, sortByName } from '../utils/sort';
 
 const { Text } = Typography;
 const MAX_SAMPLES = 180; // keep up to 3 minutes of live samples at 1-s poll
@@ -61,7 +62,7 @@ export default function DeviceDetail() {
 
   const grouped = useMemo(() => {
     const g = {};
-    for (const i of ensureArray(ifaces)) {
+    for (const i of sortByName(ensureArray(ifaces))) {
       const t = i.interface_type || 'other';
       if (!g[t]) g[t] = [];
       g[t].push(i);
@@ -95,7 +96,7 @@ export default function DeviceDetail() {
   if (!device) return null;
 
   const tabItems = Object.keys(grouped)
-    .sort()
+    .sort(compareNatural)
     .map((type) => ({
       key: type,
       label: `${type} (${grouped[type].length})`,

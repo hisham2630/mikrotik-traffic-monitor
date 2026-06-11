@@ -4,6 +4,7 @@ import { FolderOutlined, CaretRightOutlined, CaretDownOutlined, ReloadOutlined }
 import { devices as devicesApi } from '../api';
 import DeviceCard from './DeviceCard';
 import InterfaceCard from './InterfaceCard';
+import { sortByName } from '../utils/sort';
 
 function countStatuses(devices) {
   let online = 0;
@@ -118,7 +119,7 @@ export default function DeviceGroupSection({
           {cardLayout === 'interface'
             ? devices.flatMap((d) =>
                 (d.interfaces || []).length > 0
-                  ? (d.interfaces || []).map((iface) => (
+                  ? sortByName(d.interfaces || []).map((iface) => (
                       <InterfaceCard
                         key={`${d.id}:${iface.interface_name}`}
                         device={d}

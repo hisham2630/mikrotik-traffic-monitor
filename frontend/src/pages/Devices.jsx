@@ -5,6 +5,7 @@ import {
 import { PlusOutlined, CopyOutlined, EditOutlined, DeleteOutlined, ApiOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { devices as devicesApi, ensureArray } from '../api';
+import { compareNatural, sortDiscoveredGrouped } from '../utils/sort';
 import { useAuth } from '../context/AuthContext';
 
 export default function Devices() {
@@ -73,7 +74,7 @@ export default function Devices() {
         }
         data = await devicesApi.previewDiscover(v);
       }
-      setDiscovered(data.grouped || {});
+      setDiscovered(sortDiscoveredGrouped({ ...(data.grouped || {}) }));
       message.success('Interfaces loaded');
     } catch (e) {
       message.error(e.message);
@@ -83,7 +84,7 @@ export default function Devices() {
   const onDiscoverExisting = async (deviceId) => {
     try {
       const data = await devicesApi.discover(deviceId);
-      setDiscovered(data.grouped || {});
+      setDiscovered(sortDiscoveredGrouped({ ...(data.grouped || {}) }));
       message.success('Interfaces loaded');
     } catch (e) {
       message.error(e.message);
@@ -194,7 +195,9 @@ export default function Devices() {
     },
   ].filter(Boolean);
 
-  const ifacePanels = Object.entries(discovered).map(([type, items]) => ({
+  const ifacePanels = Object.entries(discovered)
+    .sort(([a], [b]) => compareNatural(a, b))
+    .map(([type, items]) => ({
     key: type,
     label: `${type} (${(items || []).length})`,
     children: (

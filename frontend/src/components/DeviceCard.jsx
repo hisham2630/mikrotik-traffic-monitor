@@ -7,6 +7,7 @@ import {
   PauseCircleFilled,
 } from '@ant-design/icons';
 import { formatBps } from '../api';
+import { sortByName } from '../utils/sort';
 
 function shortIface(name) {
   if (!name) return '';
@@ -22,7 +23,7 @@ function ifaceBadgeClass(tx, rx, online) {
 }
 
 export default function DeviceCard({ device, live }) {
-  const ifaces = device.interfaces || [];
+  const ifaces = sortByName(device.interfaces || []);
   const online = device.enabled && device.online;
   const offline = device.enabled && !device.online;
   const disabled = !device.enabled;

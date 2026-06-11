@@ -3,6 +3,7 @@ import { Table, Button, Space, Modal, Form, Select, Input, InputNumber, Switch, 
 import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons';
 import { rules as rulesApi, devices as devicesApi, alerts, ensureArray, formatBps, parseBps } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { sortByName } from '../utils/sort';
 
 function channelLabel(wa, tg) {
   const parts = [];
@@ -88,7 +89,7 @@ export default function AlertRules() {
       notify_telegram: tg,
       enabled: row.enabled,
     });
-    devicesApi.interfaces(row.device_id).then((ifs) => setIfaces(ensureArray(ifs)));
+    devicesApi.interfaces(row.device_id).then((ifs) => setIfaces(sortByName(ensureArray(ifs))));
   };
 
   const ensureDevicesLoaded = async () => {
@@ -134,7 +135,7 @@ export default function AlertRules() {
 
   const onDeviceChange = async (id) => {
     form.setFieldValue('interface_id', null);
-    const ifs = ensureArray(await devicesApi.interfaces(id));
+    const ifs = sortByName(ensureArray(await devicesApi.interfaces(id)));
     setIfaces(ifs);
   };
 

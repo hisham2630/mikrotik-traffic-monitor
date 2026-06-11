@@ -382,6 +382,7 @@ func (s *Server) previewDiscover(w http.ResponseWriter, r *http.Request) {
 	for _, i := range list {
 		grouped[i.Type] = append(grouped[i.Type], i)
 	}
+	models.SortDiscoveredGrouped(grouped)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"interfaces": list, "grouped": grouped})
 }
 
@@ -411,6 +412,7 @@ func (s *Server) discoverInterfaces(w http.ResponseWriter, r *http.Request) {
 	for _, i := range list {
 		grouped[i.Type] = append(grouped[i.Type], i)
 	}
+	models.SortDiscoveredGrouped(grouped)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"interfaces": list, "grouped": grouped})
 }
 
