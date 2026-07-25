@@ -4,9 +4,15 @@ import {
 } from 'antd';
 import { PlusOutlined, CopyOutlined, EditOutlined, DeleteOutlined, ApiOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
-import { devices as devicesApi, ensureArray } from '../api';
+import { devices as devicesApi, ensureArray, decodeRebootDays, REBOOT_DAY_OPTIONS } from '../api';
 import { compareNatural, sortDiscoveredGrouped } from '../utils/sort';
 import { useAuth } from '../context/AuthContext';
+
+const REBOOT_TIME_RULE = {
+  // Browsers may include :ss on <input type="time">; API normalizes to HH:MM.
+  pattern: /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/,
+  message: 'Use HH:MM',
+};
 
 export default function Devices() {
   const { isAdmin } = useAuth();
@@ -37,7 +43,14 @@ export default function Devices() {
     setDiscovered({});
     setSelectedIfaces([]);
     form.resetFields();
-    form.setFieldsValue({ port: 8728, polling_interval_sec: 5, enabled: true });
+    form.setFieldsValue({
+      port: 8728,
+      polling_interval_sec: 5,
+      enabled: true,
+      reboot_schedule_enabled: false,
+      reboot_days: [],
+      reboot_time: '03:00',
+    });
     setModalOpen(true);
   };
 
@@ -50,6 +63,9 @@ export default function Devices() {
       username: row.username,
       polling_interval_sec: row.polling_interval_sec,
       enabled: row.enabled,
+      reboot_schedule_enabled: !!row.reboot_schedule_enabled,
+      reboot_days: decodeRebootDays(row.reboot_days),
+      reboot_time: row.reboot_time || '03:00',
     });
     const ifs = ensureArray(await devicesApi.interfaces(row.id));
     setSelectedIfaces(ifs.map((i) => i.interface_name));
@@ -246,6 +262,62 @@ export default function Devices() {
           </Form.Item>
           <Form.Item name="enabled" label="Enabled" valuePropName="checked">
             <Switch />
+          </Form.Item>
+          <Form.Item
+            name="reboot_schedule_enabled"
+            label="Scheduled reboot"
+            valuePropName="checked"
+          >
+            <Switch
+              onChange={(checked) => {
+                if (!checked) {
+                  form.setFields([
+                    { name: 'reboot_days', errors: [] },
+                    { name: 'reboot_time', errors: [] },
+                  ]);
+                }
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, cur) => prev.reboot_schedule_enabled !== cur.reboot_schedule_enabled}
+          >
+            {() => {
+              const on = !!form.getFieldValue('reboot_schedule_enabled');
+              return (
+                <>
+                  <Form.Item
+                    name="reboot_days"
+                    label="Days"
+                    style={on ? undefined : { display: 'none' }}
+                    rules={
+                      on
+                        ? [
+                            {
+                              validator: (_, value) =>
+                                value?.length
+                                  ? Promise.resolve()
+                                  : Promise.reject(new Error('Select at least one day')),
+                            },
+                          ]
+                        : []
+                    }
+                  >
+                    <Checkbox.Group options={REBOOT_DAY_OPTIONS} />
+                  </Form.Item>
+                  <Form.Item
+                    name="reboot_time"
+                    label="Time"
+                    style={on ? undefined : { display: 'none' }}
+                    rules={on ? [{ required: true, message: 'Time required' }, REBOOT_TIME_RULE] : []}
+                    extra={on ? 'Server local time. Missed slots are caught up within 15 minutes.' : undefined}
+                  >
+                    <Input type="time" step={60} style={{ width: 140 }} />
+                  </Form.Item>
+                </>
+              );
+            }}
           </Form.Item>
           {isAdmin && (
             <Space>

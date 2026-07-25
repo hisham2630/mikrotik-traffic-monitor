@@ -94,6 +94,27 @@ body { font-family: system-ui, sans-serif; background: #141414; }
 .device-group-count--online { background: #162312; color: #52c41a; border: 1px solid #274916; }
 .device-group-count--offline { background: #2a1215; color: #ff4d4f; border: 1px solid #58181c; }
 .device-group-count--disabled { background: #262626; color: #8c8c8c; border: 1px solid #434343; }
+.device-group-next-reboot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #8c8c8c;
+  background: #1a1a1a;
+  border: 1px solid #303030;
+  border-top: none;
+}
+.device-group-next-reboot + .device-card-grid {
+  border-top: none;
+}
+.device-group-header-row:has(+ .device-group-next-reboot) {
+  border-radius: 4px 4px 0 0;
+}
+.device-group-header-row:has(+ .device-group-next-reboot):not(:has(~ .device-card-grid)) + .device-group-next-reboot {
+  border-radius: 0 0 4px 4px;
+}
 
 .device-card-grid {
   display: grid;

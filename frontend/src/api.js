@@ -30,11 +30,79 @@ export const dashboard = {
   overview: () => request('/dashboard'),
 };
 
+/** Reboot day bitmask: Sun=1, Mon=2, Tue=4, Wed=8, Thu=16, Fri=32, Sat=64 */
+export const REBOOT_DAY_OPTIONS = [
+  { label: 'Sun', value: 1 },
+  { label: 'Mon', value: 2 },
+  { label: 'Tue', value: 4 },
+  { label: 'Wed', value: 8 },
+  { label: 'Thu', value: 16 },
+  { label: 'Fri', value: 32 },
+  { label: 'Sat', value: 64 },
+];
+
+const REBOOT_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function encodeRebootDays(days) {
+  if (typeof days === 'number') return days;
+  return (Array.isArray(days) ? days : []).reduce((acc, bit) => acc | Number(bit), 0);
+}
+
+export function decodeRebootDays(bits) {
+  const n = Number(bits) || 0;
+  return REBOOT_DAY_OPTIONS.map((o) => o.value).filter((bit) => n & bit);
+}
+
+function normalizeRebootTime(t) {
+  const m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '03:00';
+  return `${String(Number(m[1])).padStart(2, '0')}:${m[2]}`;
+}
+
+/** Build create/update body; maps form day checkboxes → reboot_days bitmask. */
+export function deviceWriteBody(values) {
+  const body = {
+    ...values,
+    reboot_schedule_enabled: !!values.reboot_schedule_enabled,
+    reboot_days: encodeRebootDays(values.reboot_days),
+    reboot_time: normalizeRebootTime(values.reboot_time),
+  };
+  delete body.reboot_last_run_at;
+  return body;
+}
+
+/**
+ * Client-side next slot label from days bitmask + HH:MM (local clock).
+ * Returns e.g. "Next reboot: Sun 03:00", or null if no slot.
+ */
+export function formatNextReboot(daysBitmask, timeHHMM, now = new Date()) {
+  const bits = Number(daysBitmask) || 0;
+  if (!bits || !timeHHMM) return null;
+  const m = String(timeHHMM).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (hh > 23 || mm > 59) return null;
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now.getTime());
+    d.setSeconds(0, 0);
+    d.setMilliseconds(0);
+    d.setDate(d.getDate() + i);
+    d.setHours(hh, mm, 0, 0);
+    const bit = 1 << d.getDay();
+    if ((bits & bit) && d.getTime() > now.getTime()) {
+      const t = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      return `Next reboot: ${REBOOT_DAY_NAMES[d.getDay()]} ${t}`;
+    }
+  }
+  return null;
+}
+
 export const devices = {
   list: () => request('/devices'),
   get: (id) => request(`/devices/${id}`),
-  create: (body) => request('/devices', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id, body) => request(`/devices/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  create: (body) => request('/devices', { method: 'POST', body: JSON.stringify(deviceWriteBody(body)) }),
+  update: (id, body) => request(`/devices/${id}`, { method: 'PUT', body: JSON.stringify(deviceWriteBody(body)) }),
   delete: (id) => request(`/devices/${id}`, { method: 'DELETE' }),
   copy: (id, body) => request(`/devices/${id}/copy`, { method: 'POST', body: JSON.stringify(body) }),
   test: (id, body) => request(`/devices/${id}/test`, { method: 'POST', body: JSON.stringify(body || {}) }),

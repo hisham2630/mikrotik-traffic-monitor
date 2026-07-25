@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -8,8 +9,11 @@ import (
 	"mikrotik-monitor/internal/crypto"
 )
 
+const deviceSelectCols = `id, name, host, port, username, password_encrypted, polling_interval_sec, enabled,
+	reboot_schedule_enabled, reboot_days, reboot_time, reboot_last_run_at, created_at, updated_at`
+
 func (d *DB) ListDevices() ([]Device, error) {
-	rows, err := d.Query(`SELECT id, name, host, port, username, password_encrypted, polling_interval_sec, enabled, created_at, updated_at FROM devices ORDER BY name`)
+	rows, err := d.Query(`SELECT ` + deviceSelectCols + ` FROM devices ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -29,21 +33,27 @@ func scanDevice(rows interface {
 	Scan(dest ...any) error
 }) (*Device, error) {
 	var dev Device
-	var enabled int
+	var enabled, schedEnabled int
 	var created, updated string
+	var lastRun sql.NullString
 	err := rows.Scan(&dev.ID, &dev.Name, &dev.Host, &dev.Port, &dev.Username, &dev.PasswordEncrypted,
-		&dev.PollingIntervalSec, &enabled, &created, &updated)
+		&dev.PollingIntervalSec, &enabled, &schedEnabled, &dev.RebootDays, &dev.RebootTime, &lastRun, &created, &updated)
 	if err != nil {
 		return nil, err
 	}
 	dev.Enabled = enabled == 1
+	dev.RebootScheduleEnabled = schedEnabled == 1
+	if lastRun.Valid && lastRun.String != "" {
+		t := parseTime(lastRun.String)
+		dev.RebootLastRunAt = &t
+	}
 	dev.CreatedAt = parseTime(created)
 	dev.UpdatedAt = parseTime(updated)
 	return &dev, nil
 }
 
 func (d *DB) GetDevice(id int64) (*Device, error) {
-	row := d.QueryRow(`SELECT id, name, host, port, username, password_encrypted, polling_interval_sec, enabled, created_at, updated_at FROM devices WHERE id = ?`, id)
+	row := d.QueryRow(`SELECT `+deviceSelectCols+` FROM devices WHERE id = ?`, id)
 	return scanDevice(row)
 }
 
@@ -59,13 +69,23 @@ func (d *DB) GetDevicePassword(id int64) (string, error) {
 	return plain, err
 }
 
-func (d *DB) CreateDevice(in DeviceInput) (*Device, error) {
+func normalizeDeviceInput(in *DeviceInput) {
 	if in.Port == 0 {
 		in.Port = 8728
 	}
 	if in.PollingIntervalSec <= 0 {
 		in.PollingIntervalSec = 5
 	}
+	if strings.TrimSpace(in.RebootTime) == "" {
+		in.RebootTime = "03:00"
+	}
+}
+
+func (d *DB) CreateDevice(in DeviceInput) (*Device, error) {
+	if err := ValidateRebootSchedule(in); err != nil {
+		return nil, err
+	}
+	normalizeDeviceInput(&in)
 	enc, err := crypto.Encrypt(in.Password, d.secret)
 	if err != nil {
 		return nil, err
@@ -74,8 +94,14 @@ func (d *DB) CreateDevice(in DeviceInput) (*Device, error) {
 	if in.Enabled {
 		enabled = 1
 	}
-	res, err := d.Exec(`INSERT INTO devices (name, host, port, username, password_encrypted, polling_interval_sec, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		in.Name, in.Host, in.Port, in.Username, enc, in.PollingIntervalSec, enabled)
+	schedEnabled := 0
+	if in.RebootScheduleEnabled {
+		schedEnabled = 1
+	}
+	res, err := d.Exec(`INSERT INTO devices (name, host, port, username, password_encrypted, polling_interval_sec, enabled,
+		reboot_schedule_enabled, reboot_days, reboot_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		in.Name, in.Host, in.Port, in.Username, enc, in.PollingIntervalSec, enabled,
+		schedEnabled, in.RebootDays, in.RebootTime)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +110,9 @@ func (d *DB) CreateDevice(in DeviceInput) (*Device, error) {
 }
 
 func (d *DB) UpdateDevice(id int64, in DeviceInput) (*Device, error) {
+	if err := ValidateRebootSchedule(in); err != nil {
+		return nil, err
+	}
 	existing, err := d.GetDevice(id)
 	if err != nil {
 		return nil, err
@@ -95,22 +124,28 @@ func (d *DB) UpdateDevice(id int64, in DeviceInput) (*Device, error) {
 			return nil, err
 		}
 	}
-	if in.Port == 0 {
-		in.Port = 8728
-	}
-	if in.PollingIntervalSec <= 0 {
-		in.PollingIntervalSec = 5
-	}
+	normalizeDeviceInput(&in)
 	enabled := 0
 	if in.Enabled {
 		enabled = 1
 	}
-	_, err = d.Exec(`UPDATE devices SET name=?, host=?, port=?, username=?, password_encrypted=?, polling_interval_sec=?, enabled=?, updated_at=datetime('now') WHERE id=?`,
-		in.Name, in.Host, in.Port, in.Username, enc, in.PollingIntervalSec, enabled, id)
+	schedEnabled := 0
+	if in.RebootScheduleEnabled {
+		schedEnabled = 1
+	}
+	_, err = d.Exec(`UPDATE devices SET name=?, host=?, port=?, username=?, password_encrypted=?, polling_interval_sec=?, enabled=?,
+		reboot_schedule_enabled=?, reboot_days=?, reboot_time=?, updated_at=datetime('now') WHERE id=?`,
+		in.Name, in.Host, in.Port, in.Username, enc, in.PollingIntervalSec, enabled,
+		schedEnabled, in.RebootDays, in.RebootTime, id)
 	if err != nil {
 		return nil, err
 	}
 	return d.GetDevice(id)
+}
+
+func (d *DB) MarkRebootLastRun(id int64, at time.Time) error {
+	_, err := d.Exec(`UPDATE devices SET reboot_last_run_at=? WHERE id=?`, at.Format(time.RFC3339), id)
+	return err
 }
 
 func (d *DB) DeleteDevice(id int64) error {

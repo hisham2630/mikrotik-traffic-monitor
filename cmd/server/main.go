@@ -15,6 +15,7 @@ import (
 	"mikrotik-monitor/internal/config"
 	"mikrotik-monitor/internal/models"
 	"mikrotik-monitor/internal/poller"
+	"mikrotik-monitor/internal/rebootsched"
 	"mikrotik-monitor/internal/wshub"
 )
 
@@ -54,6 +55,8 @@ func main() {
 
 	ae := alerter.New(db, alerterCh)
 	go ae.Run()
+
+	rebootsched.Start(db, pm, ae)
 
 	authMgr := auth.NewManager(db)
 	go runSessionPruner(db)

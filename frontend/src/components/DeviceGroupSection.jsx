@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, message, Button } from 'antd';
 import { FolderOutlined, CaretRightOutlined, CaretDownOutlined, ReloadOutlined } from '@ant-design/icons';
-import { devices as devicesApi } from '../api';
+import { devices as devicesApi, formatNextReboot } from '../api';
 import DeviceCard from './DeviceCard';
 import InterfaceCard from './InterfaceCard';
 import { sortByName } from '../utils/sort';
@@ -32,6 +32,16 @@ export default function DeviceGroupSection({
   const counts = countStatuses(devices);
   const device = devices.length === 1 ? devices[0] : null;
   const stats = device ? deviceStatsById[device.id] : null;
+  const scheduleHints = isAdmin
+    ? devices
+        .filter((d) => d.reboot_schedule_enabled)
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          text: formatNextReboot(d.reboot_days, d.reboot_time),
+        }))
+        .filter((h) => h.text)
+    : [];
 
   const confirmReboot = () => {
     if (!device) return;
@@ -81,6 +91,11 @@ export default function DeviceGroupSection({
                 <span className="device-group-stat">Up {stats.uptime || '—'}</span>
               </span>
             )}
+            {device && scheduleHints[0] && (
+              <span className="device-group-stats">
+                <span className="device-group-stat">{scheduleHints[0].text}</span>
+              </span>
+            )}
           </span>
           <span className="device-group-counts">
             {counts.online > 0 && (
@@ -114,6 +129,15 @@ export default function DeviceGroupSection({
           </Button>
         )}
       </div>
+      {!device && scheduleHints.length > 0 && (
+        <div className="device-group-next-reboot">
+          {scheduleHints.map((h) => (
+            <span key={h.id}>
+              {h.name}: {h.text}
+            </span>
+          ))}
+        </div>
+      )}
       {open && (
         <div className="device-card-grid">
           {cardLayout === 'interface'

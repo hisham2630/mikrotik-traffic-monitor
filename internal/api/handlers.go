@@ -12,6 +12,7 @@ import (
 	"mikrotik-monitor/internal/mikrotik"
 	"mikrotik-monitor/internal/models"
 	"mikrotik-monitor/internal/poller"
+	"mikrotik-monitor/internal/rebootsched"
 )
 
 type Server struct {
@@ -250,6 +251,10 @@ func (s *Server) createDevice(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid body")
 		return
 	}
+	if err := models.ValidateRebootSchedule(in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	dev, err := s.DB.CreateDevice(in)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -268,6 +273,10 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) {
 	var in models.DeviceInput
 	if err := readJSON(r, &in); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := models.ValidateRebootSchedule(in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	dev, err := s.DB.UpdateDevice(id, in)
@@ -459,38 +468,14 @@ func (s *Server) listInterfaces(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) rebootDevice(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	dev, err := s.DB.GetDevice(id)
-	if err != nil {
+	if _, err := s.DB.GetDevice(id); err != nil {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	pw, err := s.DB.GetDevicePassword(id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	if err := rebootsched.RebootDevice(s.DB, s.Poller, id); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	port := dev.Port
-	if port == 0 {
-		port = 8728
-	}
-	client := &mikrotik.Client{
-		Host:     dev.Host,
-		Port:     port,
-		Username: dev.Username,
-		Password: pw,
-	}
-	if err := client.Reboot(); err != nil {
-		// Router often drops the connection immediately after reboot — treat as success.
-		errStr := strings.ToLower(err.Error())
-		if !strings.Contains(errStr, "connection") &&
-			!strings.Contains(errStr, "closed") &&
-			!strings.Contains(errStr, "eof") &&
-			!strings.Contains(errStr, "broken") {
-			writeError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-	}
-	s.Poller.ReloadDevice(id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

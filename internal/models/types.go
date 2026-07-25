@@ -12,29 +12,36 @@ type User struct {
 }
 
 type Device struct {
-	ID                 int64     `json:"id"`
-	Name               string    `json:"name"`
-	Host               string    `json:"host"`
-	Port               int       `json:"port"`
-	Username           string    `json:"username"`
-	PasswordEncrypted  string    `json:"-"`
-	PollingIntervalSec int       `json:"polling_interval_sec"`
-	Enabled            bool      `json:"enabled"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                    int64      `json:"id"`
+	Name                  string     `json:"name"`
+	Host                  string     `json:"host"`
+	Port                  int        `json:"port"`
+	Username              string     `json:"username"`
+	PasswordEncrypted     string     `json:"-"`
+	PollingIntervalSec    int        `json:"polling_interval_sec"`
+	Enabled               bool       `json:"enabled"`
+	RebootScheduleEnabled bool       `json:"reboot_schedule_enabled"`
+	RebootDays            int        `json:"reboot_days"`
+	RebootTime            string     `json:"reboot_time"`
+	RebootLastRunAt       *time.Time `json:"reboot_last_run_at"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
 	// Runtime only (not stored in DB)
 	Online    bool   `json:"online,omitempty"`
 	LastError string `json:"last_error,omitempty"`
 }
 
 type DeviceInput struct {
-	Name               string `json:"name"`
-	Host               string `json:"host"`
-	Port               int    `json:"port"`
-	Username           string `json:"username"`
-	Password           string `json:"password,omitempty"`
-	PollingIntervalSec int    `json:"polling_interval_sec"`
-	Enabled            bool   `json:"enabled"`
+	Name                  string `json:"name"`
+	Host                  string `json:"host"`
+	Port                  int    `json:"port"`
+	Username              string `json:"username"`
+	Password              string `json:"password,omitempty"`
+	PollingIntervalSec    int    `json:"polling_interval_sec"`
+	Enabled               bool   `json:"enabled"`
+	RebootScheduleEnabled bool   `json:"reboot_schedule_enabled"`
+	RebootDays            int    `json:"reboot_days"`
+	RebootTime            string `json:"reboot_time"`
 }
 
 type MonitoredInterface struct {

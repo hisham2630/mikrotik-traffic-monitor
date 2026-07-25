@@ -1,0 +1,4 @@
+ALTER TABLE devices ADD COLUMN reboot_schedule_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE devices ADD COLUMN reboot_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE devices ADD COLUMN reboot_time TEXT NOT NULL DEFAULT '03:00';
+ALTER TABLE devices ADD COLUMN reboot_last_run_at TEXT;

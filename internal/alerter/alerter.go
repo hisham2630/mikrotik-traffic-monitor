@@ -375,6 +375,23 @@ func sendPOST(client *http.Client, u string, body []byte) error {
 	return nil
 }
 
+// Notify sends msg to every enabled channel in notification_config (WhatsApp and/or Telegram).
+func (e *Engine) Notify(msg string) {
+	cfg, err := e.db.GetNotificationConfig()
+	if err != nil {
+		log.Printf("notify: load config: %v", err)
+		return
+	}
+	text := applyMessageTemplate(cfg.MessageTemplate, msg)
+	client := &http.Client{Timeout: 10 * time.Second}
+	if cfg.WhatsAppEnabled {
+		_ = sendWhatsApp(client, cfg, text)
+	}
+	if cfg.TelegramEnabled {
+		_ = sendTelegram(client, cfg, text)
+	}
+}
+
 func (e *Engine) SendTest(channel string) error {
 	cfg, err := e.db.GetNotificationConfig()
 	if err != nil {
